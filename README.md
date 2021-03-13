@@ -2,7 +2,7 @@
 This is a collection of python scripts that I've been using for Portal 1 related stuff. The most important part of this is the [Ipc Handler python file](src/ipc_stuff/ipc_handler_v2.py). This can be used to establish a connection to the [spt plugin](https://github.com/YaLTeR/SourcePauseTool) when it is loaded in-game. I will possibly add/change all of this functionality in the near future, this is all very much a work in progress.
 
 ## How to establish a connection to spt
-To establish a connection, load the plugin in-game by following the instructions on the spt repo. Then, type  `y_spt_ipc 1` in the console. Here is an example of how to use the IPC handler:
+First, load the plugin in-game by following the instructions on the spt repo, then type  `y_spt_ipc 1` in the console. Here is an example of how to use the IPC handler:
 ```python
 from pprint import pprint  # pretty print
 
