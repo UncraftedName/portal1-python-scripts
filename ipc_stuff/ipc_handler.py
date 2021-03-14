@@ -79,7 +79,7 @@ class IpcHandler:
                 cmd += '; echo %s%i' % (self.MAGIC_STR, self.last_magic)
             send_str = json.dumps({'type': 'cmd', 'cmd': cmd}) + '\0'
             self.cl_socket.sendall(send_str.encode())
-            self.__debug_print('%i sent command "%s", awaiting response...' % (self.last_magic, cmd))
+            self.__debug_print('%i sent command "%s"' % (self.last_magic, cmd.replace('"', r'\"')))
             fail_count = 0
             magic_ack = None
             spt_responses = []
