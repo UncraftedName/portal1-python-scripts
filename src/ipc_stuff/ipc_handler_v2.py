@@ -60,11 +60,13 @@ class IpcHandlerV2:
             self.closed = False
             return self
 
-    def send_cmd_and_get_response(self, cmd: str) -> list:
+    def send_cmd_and_get_response(self, cmd: str, expecting_console_response: bool = True) -> list:
         """
         Sends a command to spt, and returns the responses received via ipc if there are any.
 
         :param cmd: The command to send.
+        :param expecting_console_response: Whether or not you expect the cmd to output anything to console. Leaving
+            this at the default value should work even if nothing is printed to console.
         :return: Returns a list of any and all responses that spt sent back via spt_ipc commands.
         """
         if self.closed:
@@ -72,9 +74,9 @@ class IpcHandlerV2:
         with self.lock:
             self.last_magic = random.randint(1, 1000000)
             # these magic numbers tell us when to stop reading a ipc response and the console log file
-            cmd = '%s; y_spt_ipc_echo %s%i' % (cmd, self.MAGIC_STR, self.last_magic)
-            if self.log_file:
-                cmd = '%s; echo %s%i' % (cmd, self.MAGIC_STR, self.last_magic)
+            cmd += '; y_spt_ipc_echo %s%i' % (self.MAGIC_STR, self.last_magic)
+            if self.log_file and expecting_console_response:
+                cmd += '; echo %s%i' % (self.MAGIC_STR, self.last_magic)
             send_str = json.dumps({'type': 'cmd', 'cmd': cmd}) + '\0'
             self.cl_socket.sendall(send_str.encode())
             self.__debug_print('%i sent command "%s", awaiting response...' % (self.last_magic, cmd))
@@ -115,6 +117,10 @@ class IpcHandlerV2:
                 if magic_ack:
                     break
                 self.__debug_print(str(self.last_magic) + " didn't get ack yet, awaiting response")
+            # If we're not gonna get a console response, then in the case where the user reads from the log file we
+            # don't want the handler to get stuck waiting for the magic str.
+            if not expecting_console_response:
+                self.last_magic = None
             return spt_responses
 
     def jump_to_file_end(self) -> None:
@@ -151,6 +157,7 @@ class IpcHandlerV2:
                         line = line[:sp[0]] + line[sp[1]:]  # cut out the magic stuff, don't want user to see that
                     if not (line == '' or line.isspace()):
                         response.append(line)
+                # if last_magic is None, then we basically just do readlines() and don't look for the magic str
                 if magic_ack or not self.last_magic:
                     break
                 self.__debug_print(str(self.last_magic) + "didn't get magic number in file yet, waiting")

@@ -51,7 +51,7 @@ class VagSearcher(IpcHandlerV2):
 
         entry_xyz = self.get_vec_as_arr(entry_portal["entity"], "m_vecOrigin")
         exit_xyz = self.get_vec_as_arr(exit_portal["entity"], "m_vecOrigin")
-        player = self.send_cmd_and_get_response("y_spt_ipc_properties 0 m_fFlags m_bAnimatedEveryTick")[0]
+        player = self.send_cmd_and_get_response("y_spt_ipc_properties 0 m_fFlags m_bAnimatedEveryTick", False)[0]
         is_crouched = player["entity"]["m_fFlags"] & 2 != 0
         if not is_crouched:
             print("Warning: player is fully crouched, probably won't work for non-vertical entry portals")
@@ -70,10 +70,10 @@ class VagSearcher(IpcHandlerV2):
             print('iteration %i' % (it + 1))
             setpos_command = "setpos %f %f %f" % tuple(player_setpos)
             print("trying: " + setpos_command)
-            self.send_cmd_and_get_response(setpos_command)
+            self.send_cmd_and_get_response(setpos_command, False)
             sleep(0.02)
             # this player position is wacky - it doesn't seem to be valid right away
-            new_player_pos = self.send_cmd_and_get_response("y_spt_ipc_properties 0 m_vecOrigin")[0]
+            new_player_pos = self.send_cmd_and_get_response("y_spt_ipc_properties 0 m_vecOrigin", False)[0]
             new_player_pos = self.get_vec_as_arr(new_player_pos["entity"], "m_vecOrigin")
             print("player pos: " + str(list(new_player_pos)))
             dist_to_entry = np_linalg.norm(new_player_pos - entry_xyz)
@@ -110,7 +110,7 @@ class VagSearcher(IpcHandlerV2):
         for line in self.send_and_await_response_from_console("y_spt_find_portals"):
             for m in re.finditer(r"portal with index (?P<index>\d+) at", line):
                 idx = int(m.groupdict()["index"]) - 1
-                props = self.send_cmd_and_get_response("y_spt_ipc_ent %i" % idx)[0]
+                props = self.send_cmd_and_get_response("y_spt_ipc_ent %i" % idx, False)[0]
                 props["index"] = idx
                 portals.append(props)
         pairs = []
