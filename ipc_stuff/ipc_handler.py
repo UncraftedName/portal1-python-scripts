@@ -8,7 +8,7 @@ from threading import RLock
 from numpy import array as np_array, float32 as np_float32, ndarray as np_ndarray
 
 
-class IpcHandlerV2:
+class IpcHandler:
     HOST = '127.0.0.1'
     PORT = 27182
     RECV_SIZE = 8192
