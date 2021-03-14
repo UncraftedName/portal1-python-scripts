@@ -1,4 +1,4 @@
-from ipc_handler_v2 import IpcHandlerV2
+from ipc_handler import IpcHandler
 from portal_utils import *
 from time import sleep
 from numpy import \
@@ -11,7 +11,7 @@ from math import inf
 import re
 
 
-class VagSearcher(IpcHandlerV2):
+class VagSearcher(IpcHandler):
     DISTANCE_THRESHOLD = 100
 
     def try_vag(self, entry_portal: dict, exit_portal: dict) -> None:

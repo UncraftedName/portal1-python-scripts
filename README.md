@@ -1,13 +1,14 @@
 # Portal 1 utility scripts
-This is a collection of python scripts that I've been using for Portal 1 related stuff. The most important part of this is the [Ipc Handler python file](src/ipc_stuff/ipc_handler_v2.py). This can be used to establish a connection to the [spt plugin](https://github.com/YaLTeR/SourcePauseTool) when it is loaded in-game. I will possibly add/change all of this functionality in the near future, this is all very much a work in progress.
+This is a collection of python scripts that I've been using for Portal 1 related stuff. The most important part of this is the [IPC handler python file](ipc_stuff/ipc_handler.py). This can be used to establish a connection to the [spt plugin](https://github.com/YaLTeR/SourcePauseTool) when it is loaded in-game. I will possibly add/change all of this functionality in the near future, this is all very much a work in progress.
 
 ## How to establish a connection to spt
 First, load the plugin in-game by following the instructions on the spt repo, then type  `y_spt_ipc 1` in the console. Here is an example of how to use the IPC handler:
+
 ```python
+from ipc_stuff.ipc_handler import IpcHandler
 from pprint import pprint  # pretty print
 
-with IpcHandlerV2(log_file_name="console-log-file.log") as h:
-
+with IpcHandler(log_file_name="console-log-file.log") as h:
     # optional, prevents lots of debug messages
     h.debug = False
 
@@ -44,6 +45,8 @@ There are a couple of values like the expected response time via ipc and the exp
 ## Using the VAG searcher
 The VagSearcher class is inherited from the IPC handler, but it provides the additional functionality of trying a vertical angle glitch (VAG) on a set of portals. When you use it, the assumption is that you are crouched and noclipping, otherwise it may not work on weird portal orientations. The way I've been using it has been like this:
 ```python
+from ipc_stuff.vag_searcher import VagSearcher
+from time import sleep
 import keyboard
 
 with VagSearcher("conlog") as v:
