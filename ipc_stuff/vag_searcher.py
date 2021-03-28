@@ -70,7 +70,10 @@ class VagSearcher(IpcHandler):
             print('iteration %i' % (it + 1))
             setpos_command = "setpos %f %f %f" % tuple(player_setpos)
             print("trying: " + setpos_command)
-            self.send_cmd_and_get_response(setpos_command, False)
+            self.send_cmd_and_get_response(setpos_command, True)
+            if any('spt: nudging entity' in line for line in self.read_lines_from_log_file()):
+                print('this vag would normally cause a crash, not possible here')
+                break
             sleep(0.02)
             # this player position is wacky - it doesn't seem to be valid right away
             new_player_pos = self.send_cmd_and_get_response("y_spt_ipc_properties 0 m_vecOrigin", False)[0]
