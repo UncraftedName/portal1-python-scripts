@@ -171,8 +171,16 @@ class VagSearcher(IpcHandler):
         else:
             raise Exception("invalid portal color")
 
-    def try_vag_on_ent_index(self, idx: int) -> None:
-        pass  # TODO
+    def try_vag_on_portal_ent_index(self, idx: int) -> VagSearchResult:
+        pairs = self.get_valid_portal_pairs()
+        pair = next((p for p in pairs if p[0]["index"] == idx), None)
+        if pair is None:
+            pair = next((p for p in pairs if p[1]["index"] == idx), None)
+            if pair is None:
+                raise Exception("no valid portal with index %i found" % idx)
+            return self.try_vag(pair[1], pair[0])
+        else:
+            return self.try_vag(pair[0], pair[1])
 
 
 if __name__ == '__main__':
