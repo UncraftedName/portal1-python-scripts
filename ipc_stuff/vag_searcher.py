@@ -9,12 +9,18 @@ from numpy import \
     abs as np_abs
 from math import inf
 import re
+from enum import Enum
 
 
 class VagSearcher(IpcHandler):
-    DISTANCE_THRESHOLD = 100
 
-    def try_vag(self, entry_portal: dict, exit_portal: dict) -> None:
+    class VagSearchResult(Enum):
+        SUCCESS = 1
+        FAIL = 2
+        MAX_ITERATIONS = 3
+        WOULD_CAUSE_CRASH = 4
+
+    def try_vag(self, entry_portal: dict, exit_portal: dict) -> VagSearchResult:
         """
         Tries to setpos to the correct location to do a VAG with the specified portals.
 
@@ -22,7 +28,7 @@ class VagSearcher(IpcHandler):
         portal. The next iteration will change the setpos command in the smallest significant way possible by only
         moving along the axis for which the entry portal normal has the greatest magnitude. In this example, on the next
         iteration the setpos command will teleport the player further into the portal. This will repeat until either the
-        player has exceeded a distance threshold to both portals (which implies an AG has happened), or the player gets
+        player is not in either of the portal bubbles (which implies an AG has happened), or the player gets
         teleported to the other portal, which implies that an AG is not possible in the spot where the setpos command is
         being tried. The opposite is done if the first setpos command places the player near the exit portal.
 
@@ -37,8 +43,7 @@ class VagSearcher(IpcHandler):
         This approach has a few shortcomings:
 
         - If the distance between the portals is small, the algorithm could get confused to which portal the player
-        teleported to, and if an AG happens then the player position might not exceed the distance threshold to both
-        portals. TODO - trying comparing the player distance to where the AG will teleport them instead?
+        teleported to. TODO - trying comparing the player distance to where the AG will teleport them instead?
 
         - Since this script is fantastic at finding VAGs, it is equally as fantastic at crashing your game.
 
@@ -49,8 +54,12 @@ class VagSearcher(IpcHandler):
         :param exit_portal: A dict gotten with y_spt_ipc_ent for the exit portal.
         """
 
+        class SearchResult(Enum):
+            NEXT_TO_ENTRY = 1
+            NEXT_TO_EXIT = 2
+            BEHIND_ENTRY_PLANE = 3
+
         entry_xyz = self.get_vec_as_arr(entry_portal["entity"], "m_vecOrigin")
-        exit_xyz = self.get_vec_as_arr(exit_portal["entity"], "m_vecOrigin")
         player = self.send_cmd_and_get_response("y_spt_ipc_properties 0 m_fFlags m_bAnimatedEveryTick", False)[0]
         is_crouched = player["entity"]["m_fFlags"] & 2 != 0
         if not is_crouched:
@@ -58,14 +67,14 @@ class VagSearcher(IpcHandler):
         if player["entity"]["m_bAnimatedEveryTick"] != 0:
             print("Warning: player is probably not noclipping")
         it = 0
-        player_setpos = entry_xyz
-        # change z pos so player center is in the same plane as the portal
-        player_setpos[2] -= 18 if is_crouched else 36
-        start_at_entry = None  # if the first iteration teleports player in front of entry portal
+        player_setpos = np_array(entry_xyz)
+        # change z pos so player center is where the portal center is
+        player_half_height = 18 if is_crouched else 36
+        player_setpos[2] -= player_half_height
         entry_norm = angles_to_vec(self.get_vec_as_arr(entry_portal["entity"], "m_angRotation"))
-        remote_entry_norm = angles_to_vec(self.get_vec_as_arr(exit_portal["entity"], "m_angRotation"))
         # save only component of the portal normal with the largest magnitude, we'll be moving along in that axis
         no_idx = np_argmax(np_abs(entry_norm))
+        first_result = None
         while True:
             print('iteration %i' % (it + 1))
             setpos_command = "setpos %f %f %f" % tuple(player_setpos)
@@ -73,39 +82,50 @@ class VagSearcher(IpcHandler):
             self.send_cmd_and_get_response(setpos_command, True)
             if any('spt: nudging entity' in line for line in self.read_lines_from_log_file()):
                 print('this vag would normally cause a crash, not possible here')
-                break
+                return VagSearcher.VagSearchResult.WOULD_CAUSE_CRASH
+            # the player position is wacky - it doesn't seem to be valid right away; sleep
             sleep(0.02)
-            # this player position is wacky - it doesn't seem to be valid right away
-            new_player_pos = self.send_cmd_and_get_response("y_spt_ipc_properties 0 m_vecOrigin", False)[0]
-            new_player_pos = self.get_vec_as_arr(new_player_pos["entity"], "m_vecOrigin")
+            p_info = self.send_cmd_and_get_response("y_spt_ipc_properties 0 m_vecOrigin m_hPortalEnvironment", False)[0]
+            new_player_pos = self.get_vec_as_arr(p_info["entity"], "m_vecOrigin")
+            new_player_pos[2] += player_half_height
             print("player pos: " + str(list(new_player_pos)))
             dist_to_entry = np_linalg.norm(new_player_pos - entry_xyz)
-            dist_to_exit = np_linalg.norm(new_player_pos - exit_xyz)
-            # print(dist_to_entry, dist_to_exit)
-            if start_at_entry is None:
-                start_at_entry = dist_to_entry < VagSearcher.DISTANCE_THRESHOLD  # first iteration only
-            if dist_to_entry < VagSearcher.DISTANCE_THRESHOLD:
-                if not start_at_entry:  # we setpos at float precision through the portal plane
-                    print('no vag found')
-                    break
-                print('trying setpos closer to portal')
-                player_setpos[no_idx] = np_nextafter(player_setpos[no_idx], entry_norm[no_idx] * -inf, dtype=np_float32)
-            elif dist_to_exit < VagSearcher.DISTANCE_THRESHOLD:
-                if start_at_entry:
-                    print('no vag found')
-                    break
-                if remote_entry_norm[2] > 0.7072:
-                    print('player exited from floor portal, waiting for velocity to go to 0')
-                    sleep(0.5)
-                print('trying setpos opposite to direction of portal norm')
-                player_setpos[no_idx] = np_nextafter(player_setpos[no_idx], entry_norm[no_idx] * inf, dtype=np_float32)
+
+            player_portal_idx = h_to_i(p_info["entity"]["m_hPortalEnvironment"])
+
+            if player_portal_idx == entry_portal["index"]:
+                result = SearchResult.NEXT_TO_ENTRY
+            elif player_portal_idx == exit_portal["index"]:
+                result = SearchResult.NEXT_TO_EXIT
+            elif dist_to_entry < 1:
+                result = SearchResult.BEHIND_ENTRY_PLANE  # behind portal but didn't teleport
             else:
                 print("vag probably worked: " + setpos_command)
-                break
+                return VagSearcher.VagSearchResult.SUCCESS
+
+            if first_result is None and result != SearchResult.BEHIND_ENTRY_PLANE:
+                first_result = result
+
+            if result == SearchResult.NEXT_TO_ENTRY:
+                if first_result == SearchResult.NEXT_TO_EXIT:
+                    print("no vag found")
+                    return VagSearcher.VagSearchResult.FAIL
+                print("trying setpos closer to portal")
+                player_setpos[no_idx] = np_nextafter(player_setpos[no_idx], entry_norm[no_idx] * -inf, dtype=np_float32)
+            elif result == SearchResult.NEXT_TO_EXIT:
+                if first_result == SearchResult.NEXT_TO_ENTRY:
+                    print("no vag found")
+                    return VagSearcher.VagSearchResult.FAIL
+                print("trying setpos further from portal")
+                player_setpos[no_idx] = np_nextafter(player_setpos[no_idx], entry_norm[no_idx] * inf, dtype=np_float32)
+            else:
+                print("behind portal plane, trying setpos further from portal")
+                player_setpos[no_idx] = np_nextafter(player_setpos[no_idx], entry_norm[no_idx] * inf, dtype=np_float32)
+
             it += 1
             if it >= 35:
-                print("Maximum iterations reached while trying vag")
-                break
+                print("Maximum iterations reached")
+                return VagSearcher.VagSearchResult.MAX_ITERATIONS
 
     # returns a list of open portal pairs: [(blue1, orange1), (blue2, orange2), ...]
     def get_valid_portal_pairs(self) -> list:
@@ -138,16 +158,16 @@ class VagSearcher(IpcHandler):
                 pairs.append((p, linked))
         return pairs
 
-    def try_vag_on_color(self, color: str) -> None:
+    def try_vag_on_color(self, color: str) -> VagSearchResult:
         pairs = self.get_valid_portal_pairs()
         if len(pairs) == 0:
             raise Exception("no valid portal pairs")
         if len(pairs) > 1:
             raise Exception("not sure which portal pair to try vag on")
         if color.lower() == "blue":
-            self.try_vag(pairs[0][0], pairs[0][1])
+            return self.try_vag(pairs[0][0], pairs[0][1])
         elif color.lower() == "orange":
-            self.try_vag(pairs[0][1], pairs[0][0])
+            return self.try_vag(pairs[0][1], pairs[0][0])
         else:
             raise Exception("invalid portal color")
 
