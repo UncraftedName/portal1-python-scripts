@@ -88,7 +88,7 @@ class VagSearcher(IpcHandler):
             p_info = self.send_cmd_and_get_response("y_spt_ipc_properties 0 m_vecOrigin m_hPortalEnvironment", False)[0]
             new_player_pos = self.get_vec_as_arr(p_info["entity"], "m_vecOrigin")
             new_player_pos[2] += player_half_height
-            print("player pos: " + str(list(new_player_pos)))
+            print("player pos: %s %s %s" % (str(new_player_pos[0]), str(new_player_pos[1]), str(new_player_pos[2])))
             dist_to_entry = np_linalg.norm(new_player_pos - entry_xyz)
 
             player_portal_idx = h_to_i(p_info["entity"]["m_hPortalEnvironment"])
