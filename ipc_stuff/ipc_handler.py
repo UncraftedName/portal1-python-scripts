@@ -30,6 +30,7 @@ class IpcHandler:
         self.log_file = None
         self.lock = RLock()
         self.closed = True
+        self.saved_line = None
 
     def __enter__(self):
         with self.lock:
@@ -141,9 +142,17 @@ class IpcHandler:
                 if fail_count >= self.MAX_FAIL_COUNT:
                     raise Exception("Max fail count reached while reading from file")
                 sleep(self.EXPECTED_DISK_WRITE_TIME)
-                new_lines = self.log_file.readlines()
-                for i in range(len(new_lines)):
-                    line = new_lines[i].replace('\n', '')
+                while True:
+                    if self.saved_line:
+                        line = self.saved_line
+                        self.saved_line = None
+                    else:
+                        line = next(self.log_file, None)
+                    if line is None:  # EOF
+                        break
+                    if line == '' or line.isspace():
+                        continue
+                    line = line.replace('\n', '')
                     m = re.search(self.MAGIC_RE, line)
                     if m:
                         magic_ack = int(m.groupdict()['num'])
@@ -153,12 +162,17 @@ class IpcHandler:
                             magic_ack = None
                         else:
                             self.__debug_print("%i got ack through log file" % magic_ack)
+                        # Cut out the magic stuff, this will not be visible to the user. We might get something like
+                        # magic001 magic002 on the same line because newlines are drunk in source, so save the part
+                        # after the magic match for later, (possibly even for when this method gets called next).
                         sp = m.span()
-                        line = line[:sp[0]] + line[sp[1]:]  # cut out the magic stuff, don't want user to see that
+                        line, self.saved_line = line[:sp[0]], line[sp[1]:]
                     if not (line == '' or line.isspace()):
                         response.append(line)
-                # if last_magic is None, then we basically just do readlines() and don't look for the magic str
-                if magic_ack or not self.last_magic:
+                    if magic_ack:
+                        break
+                # if we got the ack or we're not expecting one and reached EOF, we're done
+                if magic_ack or (not self.last_magic and line is None):
                     break
                 self.__debug_print(str(self.last_magic) + "didn't get magic number in file yet, waiting")
                 fail_count += 1
