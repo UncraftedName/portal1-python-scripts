@@ -77,8 +77,9 @@ class IpcHandler:
             self.last_magic = random.randint(1, 1000000)
             # these magic numbers tell us when to stop reading a ipc response and the console log file
             cmd += '; y_spt_ipc_echo %s%i' % (self.MAGIC_STR, self.last_magic)
+            # the wait is an attempt to prevent the magic string appearing before the response
             if self.log_file and expecting_console_response:
-                cmd += '; echo %s%i' % (self.MAGIC_STR, self.last_magic)
+                cmd += ';wait 1; echo %s%i' % (self.MAGIC_STR, self.last_magic)
             send_str = json.dumps({'type': 'cmd', 'cmd': cmd}) + '\0'
             self.cl_socket.sendall(send_str.encode())
             self.__debug_print('%i sent command "%s"' % (self.last_magic, cmd.replace('"', r'\"')))
