@@ -6,6 +6,7 @@ import random
 from time import sleep
 from threading import RLock
 from numpy import array as np_array, float32 as np_float32, ndarray as np_ndarray
+from time import perf_counter
 
 
 class IpcHandler:

@@ -1,5 +1,5 @@
-from ipc_handler import IpcHandler
-from portal_utils import *
+from ipc_stuff.ipc_handler import IpcHandler
+from ipc_stuff.portal_utils import *
 from time import sleep
 from numpy import \
     argmax as np_argmax, \
